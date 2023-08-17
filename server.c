@@ -1,43 +1,41 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#include "common.h"
 
-int main() {
-    char buffer[50] = {0};
-    struct sockaddr_in servaddr = {0};
+int main(int argc, char ** argv) {
+    // Create socket handle
+    int sockfd = socket_file_descriptor();
 
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    if (sockfd == -1) {
-        perror("ERROR: Failed to create socket");
-        exit(EXIT_FAILURE);
-    }
-
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(12345);
-    servaddr.sin_addr.s_addr = INADDR_ANY;
+    /** Setup
+     * server_address - stores the address of this program (the server)
+     * client_address - stores the address of the 
+    */
+    struct sockaddr_in server_address = {0};
+    struct sockaddr_in client_address = {0};
+    setup_socket_address(&server_address, "", SERVER_PORT);
+    socklen_t address_size;
 
     // Binding the socket to the server address
-    int rc = bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr));
-
-    if (rc == -1) {
+    int bind_result = bind(sockfd, (const struct sockaddr *)&server_address, sizeof(server_address));
+    if (bind_result != 0) {
         perror("ERROR: Failed to bind");
         close(sockfd);
         exit(EXIT_FAILURE);
+    } else printf("Bind successful\n");
+
+    // Receive a message from the client
+    char buffer[1024] = {0};
+    while(1) {
+        make_zero(buffer, 1024);
+        address_size = sizeof(client_address);
+        recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr *)&client_address, &address_size);
+
+        printf("Received from local: %s", buffer);
+
+        char message[1024] = {0};
+        strcpy(message, "Fayzulloh: ");
+        strcpy(message + 11, buffer);
+        sendto(sockfd, message, 1024, 0, (const struct sockaddr *)&client_address, address_size);
     }
 
-    // Receive message
-    // MSG_WAITALL - wait until whole message is received before returning
-    socklen_t len = 0;
-    int n = recvfrom(sockfd, (char *)buffer, 50, MSG_WAITALL, 0, &len);
-
-    printf("%s", buffer);
     close(sockfd);
-
     return 0;
 }

@@ -1,51 +1,58 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#include "common.h"
 
-int main () {
-    char * hello = "hello from client\n";
-
-    // Loads sockaddr_in struct onto stack and zeroes it
-    //      don't have to do memset later
-    struct sockaddr_in servaddr = {0};
-
-    /* Explanation: socket object
-     * AF_INET - IPv4
-     * SOCK_DGRAM - UDP packet signifier
-     * 0 - protocol 0 for computer to know it's UDP
-     */
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    // Error handling
-    if (sockfd == -1) {
-        perror("ERROR: Failed to create socket!");
-        exit(EXIT_FAILURE);
-    }
-
-    /** Setting destination
-     * sin_family set to IPv4
-     * htons configures the endianness properly
-     * INADDR_ANY = 0.0.0.0
-     * 
+int main (int argc, char ** argv) {
+    /** Setup
+     * sockfd - socket file descriptor
+     * servaddr - socket address for the server
     */
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(12345);
-    servaddr.sin_addr.s_addr = INADDR_ANY;
+    int sockfd = socket_file_descriptor();
+    struct sockaddr_in servaddr = {0};
+    setup_socket_address(&servaddr, SERVER_IP, SERVER_PORT);
+    socklen_t addr_size = sizeof(servaddr);
 
-    // Sending string to server
-    int len = sendto(sockfd, (const char *)hello, strlen(hello), 
-        0, (const struct sockaddr *)&servaddr, sizeof(servaddr));
-    
-    // Error handling
-    if (len == -1) {
-        perror("ERROR: Failed to send string to server");
+    // Get username
+    char * username;
+    size_t username_size = 0;
+    printf("Username: ");
+    int username_len = getline(&username, &username_size, stdin);
+    username[username_len - 1] = ':';
+
+    // Get messages and send to server
+    while(1) {
+        // Get the message
+        char * msg;
+        size_t msg_size = 0;
+        int msg_len = getline(&msg, &msg_size, stdin);
+
+        // Check if exit
+        if (strcmp(msg, "exit\n") == 0) {
+            free(msg);
+            break;
+        }
+        
+        // Construct message to send
+        char * final_msg = malloc(sizeof(char) * (username_len + msg_len));
+        strcpy(final_msg, username);
+        strcpy(final_msg + username_len, msg);
+
+        // Send the message
+        sendto(sockfd, final_msg, username_len + msg_len, 0, (const struct sockaddr * )&servaddr, addr_size);
+        
+        // Free memory
+        free(msg);
+        free(final_msg);
     }
-    close(sockfd);
 
+
+    // Receive messages from server
+    for (int i = 0; i < 10; ++i) {
+        char msg[1024] = {0};
+        recvfrom(sockfd, msg, 1024, 0, (struct sockaddr *)&servaddr, &addr_size);
+        printf("%s", msg);
+    }
+
+    close(sockfd);
+    free(username);
     return 0;
 }
+
